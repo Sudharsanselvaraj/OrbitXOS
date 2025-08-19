@@ -2,8 +2,8 @@ import joblib
 import os
 import pandas as pd
 
-# Path to the model file
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "prop_risk_model.joblib")
+# Path to the model file (inside app folder)
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model.joblib")
 
 # Load the trained GradientBoostingClassifier
 try:
@@ -43,4 +43,3 @@ def predict_risk(i_ecc: float, j_ecc: float, i_incl: float, j_incl: float, vrel_
         "risk_level": level,
         "maneuver_suggestion": suggestion
     }
-

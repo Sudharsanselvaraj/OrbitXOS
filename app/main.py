@@ -2,6 +2,13 @@ from fastapi import FastAPI
 from app.model import predict_top_events
 
 app = FastAPI(title="🚀 Satellite Collision Risk API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],    # Allow all origins - everyone can access
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")

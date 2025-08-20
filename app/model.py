@@ -39,16 +39,17 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # Ensure only required features are used
-        feature_cols = [
-            "i_ecc", "j_ecc",
-            "i_incl", "j_incl",
-            "i_sma", "j_sma",
-            "vrel_kms"
-        ]
-        X = df[feature_cols]
+        # Expected feature columns for the model
+        expected_features = ["i_ecc", "j_ecc", "i_incl", "j_incl", "i_sma", "j_sma", "vrel_kms"]
+
+        # Check which features actually exist in the CSV
+        feature_cols = [col for col in expected_features if col in df.columns]
+
+        if not feature_cols:
+            return {"status": "error", "message": "None of the required feature columns are present in the CSV."}
 
         # Predict probabilities
+        X = df[feature_cols]
         probs = model.predict_proba(X)[:, 1]
 
         # Attach predictions
@@ -70,6 +71,7 @@ def predict_top_events(top_n: int = 4):
                 "maneuver_suggestion": maneuver,
                 "confidence": f"{row['probability']*100:.1f}%"
             })
+
         return {"critical_events": results}
 
     except Exception as e:

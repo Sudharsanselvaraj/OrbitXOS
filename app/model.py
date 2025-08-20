@@ -3,7 +3,7 @@ import os
 import pandas as pd
 
 # Path to the model file (inside app folder)
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model.joblib")
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
 
 # Load the trained GradientBoostingClassifier
 try:

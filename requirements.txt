@@ -1,14 +1,5 @@
-# requirements.txt
-
-# Core API
-fastapi==0.115.0
-uvicorn==0.30.6
-
-# ML model loading
-joblib==1.4.2
-scikit-learn==1.6.1
-numpy==1.26.4
-
-# (Optional) If you use Pandas/Scipy in future add:
-pandas==2.2.2
-scipy==1.13.1
+fastapi
+uvicorn
+joblib
+scikit-learn
+numpy

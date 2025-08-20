@@ -13,17 +13,19 @@ def predict(
     j_ecc: float,
     i_incl: float,
     j_incl: float,
+    i_sma: float,   # ✅ NEW
+    j_sma: float,   # ✅ NEW
     vrel_kms: float,
-    i_raan: float,   # ✅ NEW
-    j_raan: float    # ✅ NEW
+    i_raan: float,
+    j_raan: float
 ):
     """
     Predict satellite collision risk.
     Example:
-    /predict?i_ecc=0.01&j_ecc=0.02&i_incl=55&j_incl=56&vrel_kms=10&i_raan=120&j_raan=121
+    /predict?i_ecc=0.01&j_ecc=0.02&i_incl=55&j_incl=56&i_sma=6780&j_sma=6795&vrel_kms=10&i_raan=120&j_raan=121
     """
     try:
-        result = predict_risk(i_ecc, j_ecc, i_incl, j_incl, vrel_kms, i_raan, j_raan)
+        result = predict_risk(i_ecc, j_ecc, i_incl, j_incl, i_sma, j_sma, vrel_kms, i_raan, j_raan)
         return {"status": "success", "result": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}

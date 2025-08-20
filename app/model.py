@@ -21,16 +21,23 @@ def classify_risk(prob: float):
 
 
 def time_to_impact(tca_str: str) -> str:
+    """Return human-readable time until (or since) TCA."""
     try:
-        tca = datetime.fromisoformat(tca_str.replace("Z", "+00:00"))
+        # Parse datetime
+        tca = datetime.fromisoformat(tca_str)
+        # If naive (no timezone), assume UTC
+        if tca.tzinfo is None:
+            tca = tca.replace(tzinfo=timezone.utc)
+
         now = datetime.now(timezone.utc)
         delta = tca - now
-        hours, remainder = divmod(abs(delta).seconds, 3600)
+        hours, remainder = divmod(abs(delta.total_seconds()), 3600)
         minutes, _ = divmod(remainder, 60)
         sign = "-" if delta.total_seconds() < 0 else "+"
-        return f"{sign}{abs(delta.days)}d {hours}h {minutes}m"
+        return f"{sign}{int(abs(delta.days))}d {int(hours)%24}h {int(minutes)}m"
     except Exception:
         return "N/A"
+
 
 
 def predict_top_events(top_n: int = 4):

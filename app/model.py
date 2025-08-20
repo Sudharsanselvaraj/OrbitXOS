@@ -2,7 +2,6 @@ import joblib
 import os
 import pandas as pd
 
-# Path to the model file (inside app folder)
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
 
 # Load the trained GradientBoostingClassifier
@@ -14,8 +13,9 @@ except Exception as e:
 def predict_risk(
     i_ecc: float, j_ecc: float,
     i_incl: float, j_incl: float,
+    i_sma: float, j_sma: float,   # ✅ NEW
     vrel_kms: float,
-    i_raan: float, j_raan: float   # ✅ NEW features
+    i_raan: float, j_raan: float
 ):
     """
     Takes orbital features and returns collision risk probability, risk level,
@@ -26,15 +26,15 @@ def predict_risk(
         "j_ecc": j_ecc,
         "i_incl": i_incl,
         "j_incl": j_incl,
+        "i_sma": i_sma,   # ✅ NEW
+        "j_sma": j_sma,   # ✅ NEW
         "vrel_kms": vrel_kms,
-        "i_raan": i_raan,    # ✅ NEW
-        "j_raan": j_raan     # ✅ NEW
+        "i_raan": i_raan,
+        "j_raan": j_raan
     }])
 
-    # Predict risk probability (class 1)
     prob = risk_model.predict_proba(features)[0][1]
 
-    # Interpret risk
     if prob > 0.7:
         level = "High"
         suggestion = "Prepare avoidance, ΔV radial, ~0.2–0.5 m/s"

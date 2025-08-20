@@ -11,7 +11,12 @@ try:
 except Exception as e:
     raise RuntimeError(f"❌ Could not load model from {MODEL_PATH}: {e}")
 
-def predict_risk(i_ecc: float, j_ecc: float, i_incl: float, j_incl: float, vrel_kms: float):
+def predict_risk(
+    i_ecc: float, j_ecc: float,
+    i_incl: float, j_incl: float,
+    vrel_kms: float,
+    i_raan: float, j_raan: float   # ✅ NEW features
+):
     """
     Takes orbital features and returns collision risk probability, risk level,
     and maneuver suggestion.
@@ -21,7 +26,9 @@ def predict_risk(i_ecc: float, j_ecc: float, i_incl: float, j_incl: float, vrel_
         "j_ecc": j_ecc,
         "i_incl": i_incl,
         "j_incl": j_incl,
-        "vrel_kms": vrel_kms
+        "vrel_kms": vrel_kms,
+        "i_raan": i_raan,    # ✅ NEW
+        "j_raan": j_raan     # ✅ NEW
     }])
 
     # Predict risk probability (class 1)

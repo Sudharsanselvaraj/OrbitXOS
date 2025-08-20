@@ -44,31 +44,22 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
+        # Convert EPOCH to datetime (UTC) and filter only future events
+        df['EPOCH_dt'] = pd.to_datetime(df['EPOCH'], errors='coerce', utc=True)
+        now = datetime.now(timezone.utc)
+        df = df[df['EPOCH_dt'] > now]
+
+        if df.empty:
+            return {"status": "info", "message": "No upcoming events found."}
+
         # Map CSV columns to model features
-        if 'ECCENTRICITY' in df.columns:
-            df['i_ecc'] = df['ECCENTRICITY']
-            df['j_ecc'] = df['ECCENTRICITY']
-        else:
-            df['i_ecc'] = 0.0
-            df['j_ecc'] = 0.0
-
-        if 'INCLINATION' in df.columns:
-            df['i_incl'] = df['INCLINATION']
-            df['j_incl'] = df['INCLINATION']
-        else:
-            df['i_incl'] = 0.0
-            df['j_incl'] = 0.0
-
-        if 'MEAN_MOTION' in df.columns:
-            df['i_sma'] = df['MEAN_MOTION']
-            df['j_sma'] = df['MEAN_MOTION']
-        else:
-            df['i_sma'] = 0.0
-            df['j_sma'] = 0.0
-
-        # vrel_kms placeholder (or compute if available)
-        if 'VREL_KMS' not in df.columns:
-            df['vrel_kms'] = 0.5  # default value
+        df['i_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df.columns else 0.0
+        df['j_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df.columns else 0.0
+        df['i_incl'] = df['INCLINATION'] if 'INCLINATION' in df.columns else 0.0
+        df['j_incl'] = df['INCLINATION'] if 'INCLINATION' in df.columns else 0.0
+        df['i_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df.columns else 0.0
+        df['j_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df.columns else 0.0
+        df['vrel_kms'] = df['VREL_KMS'] if 'VREL_KMS' in df.columns else 0.5  # default placeholder
 
         # Features for prediction
         feature_cols = ["i_ecc", "j_ecc", "i_incl", "j_incl", "i_sma", "j_sma", "vrel_kms"]
@@ -78,7 +69,7 @@ def predict_top_events(top_n: int = 4):
         probs = model.predict_proba(X)[:, 1]
         df["probability"] = probs
 
-        # Get top-N critical events
+        # Get top-N critical upcoming events
         critical_df = df.sort_values("probability", ascending=False).head(top_n)
 
         results = []
@@ -99,3 +90,4 @@ def predict_top_events(top_n: int = 4):
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
+

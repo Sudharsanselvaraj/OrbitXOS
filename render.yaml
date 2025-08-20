@@ -1,4 +1,3 @@
-# render.yaml
 services:
   - type: web
     name: sat-risk-api
@@ -8,4 +7,4 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port 10000
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11
+        value: 3.10

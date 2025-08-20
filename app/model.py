@@ -3,8 +3,8 @@ import pandas as pd
 from datetime import datetime, timezone
 
 # Load model at startup
-MODEL_PATH = "prop_risk_model_resaved.joblib"
-CSV_PATH = "active_tle_catalog.csv"
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
+CSV_PATH = os.path.join(os.path.dirname(__file__), "active_tle_catalog.csv"
 model = joblib.load(MODEL_PATH)
 
 

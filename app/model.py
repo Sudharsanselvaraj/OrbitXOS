@@ -1,55 +1,36 @@
 import joblib
+import numpy as np
 import os
-import pandas as pd
 
-# Path to trained GradientBoostingClassifier
+# Load the trained model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
+model = joblib.load(MODEL_PATH)
 
-try:
-    risk_model = joblib.load(MODEL_PATH)
-except Exception as e:
-    raise RuntimeError(f"❌ Could not load model from {MODEL_PATH}: {e}")
-
-def predict_risk(
-    i_ecc: float, j_ecc: float,
-    i_incl: float, j_incl: float,
-    i_sma: float, j_sma: float,
-    vrel_kms: float
-):
+def predict_risk(i_ecc, j_ecc, i_incl, j_incl, i_sma, j_sma, vrel_kms, i_raan, j_raan):
     """
-    Takes orbital features and returns collision risk probability,
-    risk level, and maneuver suggestion.
-    Features used (7 total):
-    - i_ecc, j_ecc
-    - i_incl, j_incl
-    - i_sma, j_sma
-    - vrel_kms
+    Run risk prediction for one satellite-debris conjunction.
+    Returns probability, risk level, and maneuver suggestion.
     """
-    # ✅ Ensure only 7 features are passed
-    features = pd.DataFrame([{
-        "i_ecc": i_ecc,
-        "j_ecc": j_ecc,
-        "i_incl": i_incl,
-        "j_incl": j_incl,
-        "i_sma": i_sma,
-        "j_sma": j_sma,
-        "vrel_kms": vrel_kms
-    }])
 
-    prob = risk_model.predict_proba(features)[0][1]
+    # Features in the correct order (7 features expected by GradientBoostingClassifier)
+    X = np.array([[i_ecc, j_ecc, i_incl, j_incl, i_sma, j_sma, vrel_kms]])
 
-    if prob > 0.7:
-        level = "High"
-        suggestion = "Prepare avoidance, ΔV radial, ~0.2–0.5 m/s"
-    elif prob > 0.4:
-        level = "Medium"
-        suggestion = "Monitor & consider small avoidance maneuver"
+    # Predict probability
+    prob = model.predict_proba(X)[0][1]
+
+    # Define thresholds
+    if prob >= 0.6:
+        risk = "High"
+        maneuver = "Prepare avoidance, ΔV radial, ~0.2-0.5 m/s"
+    elif prob >= 0.3:
+        risk = "Medium"
+        maneuver = "Monitor closely, potential maneuver if probability increases"
     else:
-        level = "Low"
-        suggestion = "No immediate action required"
+        risk = "Low"
+        maneuver = "No immediate action required"
 
     return {
-        "probability": round(float(prob), 3),
-        "risk_level": level,
-        "maneuver_suggestion": suggestion
+        "probability": float(round(prob, 3)),  # e.g. 0.692
+        "risk_level": risk,
+        "maneuver_suggestion": maneuver
     }

@@ -5,3 +5,4 @@ scikit-learn
 numpy
 pandas
 python-dateutil
+requests

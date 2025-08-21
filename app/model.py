@@ -8,7 +8,7 @@ from math import floor
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
 CSV_PATH = os.path.join(os.path.dirname(__file__), "reduced_file2.csv")
 
-# --- Load model (optional, fallback if no probability column) ---
+# --- Load model ---
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
 else:
@@ -28,21 +28,15 @@ def classify_risk(prob: float):
 # --- Time to impact ---
 def time_to_impact(tca_str: str) -> str:
     try:
-        tca = datetime.fromisoformat(tca_str)
+        tca = datetime.fromisoformat(str(tca_str))
         if tca.tzinfo is None:
             tca = tca.replace(tzinfo=timezone.utc)
-
         now = datetime.now(timezone.utc)
         delta_sec = max(0, (tca - now).total_seconds())
-
         days = floor(delta_sec // 86400)
         hours = floor((delta_sec % 86400) // 3600)
         minutes = floor((delta_sec % 3600) // 60)
-
-        if days > 0:
-            return f"{days}d {hours}h {minutes}m"
-        else:
-            return f"{hours}h {minutes}m"
+        return f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
     except Exception:
         return "N/A"
 
@@ -51,32 +45,26 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # --- Adjust column names according to your CSV ---
-        # Example CSV columns:
-        # 0:i_index, 1:Satellite, 2:Debris, 3:TCA, 4:RawProbability, ...
-        sat_col = df.columns[1]  # satellite name
-        debris_col = df.columns[2]  # debris name
-        tca_col = df.columns[3]  # TCA datetime
-        prob_col = df.columns[4]  # raw probability/risk score
+        # --- Ensure satellite & debris are strings ---
+        sat_col = df.columns[1]  # adjust based on CSV
+        debris_col = df.columns[2]
+        tca_col = df.columns[3]
+        prob_col = df.columns[4]
+
+        df[sat_col] = df[sat_col].astype(str)
+        df[debris_col] = df[debris_col].astype(str)
 
         # Convert TCA to datetime
         df['EPOCH_dt'] = pd.to_datetime(df[tca_col], errors='coerce', utc=True)
 
-        # Convert raw probability to numeric
+        # Convert probability to numeric and scale
         df['raw_prob'] = pd.to_numeric(df[prob_col], errors='coerce').fillna(0.0)
-
-        # --- Dynamic scaling of probabilities ---
         max_prob = df['raw_prob'].max()
-        if max_prob <= 0:
-            df['probability'] = 0.0
-        else:
-            df['probability'] = df['raw_prob'] / max_prob  # scale 0–1 proportionally
-        df['probability'] = df['probability'].clip(0.0, 1.0)
+        df['probability'] = (df['raw_prob'] / max_prob).clip(0.0, 1.0) if max_prob > 0 else 0.0
 
-        # --- Filter events: today + next day ---
+        # --- Filter for today + next day ---
         now = datetime.now(timezone.utc)
-        tomorrow = now + timedelta(days=2)
-        future_df = df[(df['EPOCH_dt'] >= now) & (df['EPOCH_dt'] <= tomorrow)]
+        future_df = df[df['EPOCH_dt'] >= now]
 
         if future_df.empty:
             return {"critical_events": [], "status": "info", "message": "No upcoming events found."}
@@ -89,8 +77,8 @@ def predict_top_events(top_n: int = 4):
             prob = row['probability']
             risk_level, maneuver = classify_risk(prob)
             results.append({
-                "satellite": row[sat_col],
-                "debris": row[debris_col],
+                "satellite": row[sat_col],       # alphabetic names ensured
+                "debris": row[debris_col],       # alphabetic names ensured
                 "tca": row[tca_col],
                 "time_to_impact": time_to_impact(row[tca_col]),
                 "probability": f"{prob*100:.1f}%",

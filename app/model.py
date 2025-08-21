@@ -9,75 +9,89 @@ CSV_PATH = os.path.join(os.path.dirname(__file__), "active_tle_catalog.csv")
 model = joblib.load(MODEL_PATH)
 
 
+# --- Replace classify_risk with this (no special symbols, ops terms) ---
 def classify_risk(prob: float):
     if prob < 0.3:
-        return "Low", "No immediate action required"
+        return "Low", "No action needed"
     elif prob < 0.6:
-        return "Medium", "Monitor closely, prepare possible maneuver"
+        return "Medium", "Monitor, prepare retrograde burn"
     elif prob < 0.8:
-        return "High", "Prepare avoidance, ΔV radial, ~0.2–0.5 m/s"
+        return "High", "Plan radial maneuver"
     else:
-        return "Critical", "Immediate avoidance required, ΔV > 0.5 m/s"
+        return "Critical", "Execute immediate retrograde burn"
 
+
+
+# --- Replace time_to_impact with this (never negative, clean output) ---
+from math import floor
 
 def time_to_impact(tca_str: str) -> str:
-    """Return human-readable time until (or since) TCA."""
+    """Return countdown until TCA; clamped at 0 if already passed."""
     try:
-        # Parse datetime
         tca = datetime.fromisoformat(tca_str)
-        # If naive (no timezone), assume UTC
         if tca.tzinfo is None:
             tca = tca.replace(tzinfo=timezone.utc)
 
         now = datetime.now(timezone.utc)
-        delta = tca - now
-        hours, remainder = divmod(abs(delta.total_seconds()), 3600)
-        minutes, _ = divmod(remainder, 60)
-        sign = "-" if delta.total_seconds() < 0 else "+"
-        return f"{sign}{int(abs(delta.days))}d {int(hours)%24}h {int(minutes)}m"
+        delta_sec = max(0, (tca - now).total_seconds())  # clamp negatives
+
+        days = floor(delta_sec // 86400)
+        hours = floor((delta_sec % 86400) // 3600)
+        minutes = floor((delta_sec % 3600) // 60)
+
+        # Show the most useful parts; omit zero days for brevity
+        if days > 0:
+            return f"{days}d {hours}h {minutes}m"
+        else:
+            return f"{hours}h {minutes}m"
     except Exception:
         return "N/A"
 
 
 
+# --- Replace predict_top_events with this (strictly future-only) ---
 def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # Convert EPOCH to datetime (UTC)
+        # Parse EPOCH and filter strictly to future events
         df['EPOCH_dt'] = pd.to_datetime(df['EPOCH'], errors='coerce', utc=True)
         now = datetime.now(timezone.utc)
+        future_df = df[df['EPOCH_dt'] > now].copy()  # copy to avoid chained-assign issues
 
-        # Filter only future events
-        future_df = df[df['EPOCH_dt'] > now]
+        # If there are no future events, return empty list (but not past)
+        if future_df.empty:
+            return {"critical_events": [], "status": "info", "message": "No upcoming events found."}
 
-        # If not enough future events, pick closest upcoming events regardless
-        if len(future_df) < top_n:
-            future_df = df[df['EPOCH_dt'].notna()].sort_values("EPOCH_dt").head(top_n)
-
-        # Map CSV columns to model features
-        df_cols = df.columns
-        df['i_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df_cols else 0.0
-        df['j_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df_cols else 0.0
-        df['i_incl'] = df['INCLINATION'] if 'INCLINATION' in df_cols else 0.0
-        df['j_incl'] = df['INCLINATION'] if 'INCLINATION' in df_cols else 0.0
-        df['i_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df_cols else 0.0
-        df['j_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df_cols else 0.0
-        df['vrel_kms'] = df['VREL_KMS'] if 'VREL_KMS' in df_cols else 0.5
+        # Build feature columns on the filtered frame
+        cols = future_df.columns
+        future_df['i_ecc']  = future_df['ECCENTRICITY'] if 'ECCENTRICITY' in cols else 0.0
+        future_df['j_ecc']  = future_df['ECCENTRICITY'] if 'ECCENTRICITY' in cols else 0.0
+        future_df['i_incl'] = future_df['INCLINATION']  if 'INCLINATION'  in cols else 0.0
+        future_df['j_incl'] = future_df['INCLINATION']  if 'INCLINATION'  in cols else 0.0
+        future_df['i_sma']  = future_df['MEAN_MOTION']  if 'MEAN_MOTION'  in cols else 0.0
+        future_df['j_sma']  = future_df['MEAN_MOTION']  if 'MEAN_MOTION'  in cols else 0.0
+        future_df['vrel_kms'] = future_df['VREL_KMS']   if 'VREL_KMS'     in cols else 0.5  # placeholder
 
         feature_cols = ["i_ecc", "j_ecc", "i_incl", "j_incl", "i_sma", "j_sma", "vrel_kms"]
+
+        # Ensure all feature columns exist (fallback to zeros if missing)
+        for c in feature_cols:
+            if c not in future_df.columns:
+                future_df[c] = 0.0
+
         X = future_df[feature_cols]
 
         # Predict probabilities
         probs = model.predict_proba(X)[:, 1]
         future_df["probability"] = probs
 
-        # Get top-N critical events
+        # Select up to top_n (only future rows)
         critical_df = future_df.sort_values("probability", ascending=False).head(top_n)
 
         results = []
         for _, row in critical_df.iterrows():
-            risk_level, maneuver = classify_risk(row["probability"])
+            risk_level, maneuver = classify_risk(float(row["probability"]))
             results.append({
                 "satellite": row.get("OBJECT_NAME", "Unknown"),
                 "debris": row.get("OBJECT_ID", "Unknown"),

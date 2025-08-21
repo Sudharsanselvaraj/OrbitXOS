@@ -55,15 +55,16 @@ def predict_top_events(top_n: int = 4):
         df['EPOCH_dt'] = pd.to_datetime(df.iloc[:, 4], errors='coerce', utc=True)
         df['raw_prob'] = pd.to_numeric(df.iloc[:, 5], errors='coerce')
 
-        # Normalize probability to [0,1]
-        def normalize_prob(x):
-            if pd.isna(x):
-                return 0.0
-            if x > 1.0:
-                x = x / 100  # adjust if CSV uses 0–100 scale
-            return min(max(x, 0.0), 1.0)
+        # Smart normalization:
+        # If max(prob) > 1, assume 0–100 scale; else 0–1
+        max_prob = df['raw_prob'].max()
+        if max_prob > 1.0:
+            df['probability'] = df['raw_prob'] / 100.0
+        else:
+            df['probability'] = df['raw_prob']
 
-        df['probability'] = df['raw_prob'].apply(normalize_prob)
+        # Clamp between 0 and 1
+        df['probability'] = df['probability'].clip(0.0, 1.0)
 
         # Filter events: today + next day
         now = datetime.now(timezone.utc)

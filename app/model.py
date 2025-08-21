@@ -1,14 +1,14 @@
 import os
 import joblib
 import pandas as pd
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from math import floor
 
 # --- Paths ---
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
 CSV_PATH = os.path.join(os.path.dirname(__file__), "reduced_file2.csv")
 
-# --- Load model ---
+# --- Load model (optional fallback) ---
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
 else:
@@ -45,24 +45,27 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # --- Ensure satellite & debris are strings ---
-        sat_col = df.columns[1]  # adjust based on CSV
+        # --- Map satellite & debris names as strings ---
+        sat_col = df.columns[1]   # adjust if needed
         debris_col = df.columns[2]
         tca_col = df.columns[3]
-        prob_col = df.columns[4]
+        prob_col = df.columns[4]  # raw probability/risk score
 
         df[sat_col] = df[sat_col].astype(str)
         df[debris_col] = df[debris_col].astype(str)
 
-        # Convert TCA to datetime
+        # --- Convert TCA and probability ---
         df['EPOCH_dt'] = pd.to_datetime(df[tca_col], errors='coerce', utc=True)
-
-        # Convert probability to numeric and scale
         df['raw_prob'] = pd.to_numeric(df[prob_col], errors='coerce').fillna(0.0)
-        max_prob = df['raw_prob'].max()
-        df['probability'] = (df['raw_prob'] / max_prob).clip(0.0, 1.0) if max_prob > 0 else 0.0
 
-        # --- Filter for today + next day ---
+        # --- Dynamic scaling of probability ---
+        max_prob = df['raw_prob'].max()
+        if max_prob > 0:
+            df['probability'] = (df['raw_prob'] / max_prob).clip(0.0, 1.0)
+        else:
+            df['probability'] = 0.0
+
+        # --- Filter future events only ---
         now = datetime.now(timezone.utc)
         future_df = df[df['EPOCH_dt'] >= now]
 
@@ -77,8 +80,8 @@ def predict_top_events(top_n: int = 4):
             prob = row['probability']
             risk_level, maneuver = classify_risk(prob)
             results.append({
-                "satellite": row[sat_col],       # alphabetic names ensured
-                "debris": row[debris_col],       # alphabetic names ensured
+                "satellite": row[sat_col],           # alphabetic name ensured
+                "debris": row[debris_col],           # alphabetic name ensured
                 "tca": row[tca_col],
                 "time_to_impact": time_to_impact(row[tca_col]),
                 "probability": f"{prob*100:.1f}%",

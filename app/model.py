@@ -51,15 +51,23 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # --- Correct CSV columns ---
         # Epoch is column 4, probability is column 5
         df['EPOCH_dt'] = pd.to_datetime(df.iloc[:, 4], errors='coerce', utc=True)
-        df['probability'] = df.iloc[:, 5].astype(float)
+        df['raw_prob'] = pd.to_numeric(df.iloc[:, 5], errors='coerce')
 
+        # Normalize probability to [0,1]
+        def normalize_prob(x):
+            if pd.isna(x):
+                return 0.0
+            if x > 1.0:
+                x = x / 100  # adjust if CSV uses 0–100 scale
+            return min(max(x, 0.0), 1.0)
+
+        df['probability'] = df['raw_prob'].apply(normalize_prob)
+
+        # Filter events: today + next day
         now = datetime.now(timezone.utc)
-        tomorrow = now + timedelta(days=2)  # today + next day
-
-        # Filter events for today and next day
+        tomorrow = now + timedelta(days=2)
         future_df = df[(df['EPOCH_dt'] >= now) & (df['EPOCH_dt'] <= tomorrow)]
 
         if future_df.empty:
@@ -70,16 +78,17 @@ def predict_top_events(top_n: int = 4):
 
         results = []
         for _, row in critical_df.iterrows():
-            risk_level, maneuver = classify_risk(row["probability"])
+            prob = row['probability']
+            risk_level, maneuver = classify_risk(prob)
             results.append({
                 "satellite": row.iloc[1],
                 "debris": row.iloc[2],
                 "tca": row.iloc[4],
                 "time_to_impact": time_to_impact(row.iloc[4]),
-                "probability": f"{row['probability']*100:.1f}%",
+                "probability": f"{prob*100:.1f}%",
                 "risk_level": risk_level,
                 "maneuver_suggestion": maneuver,
-                "confidence": f"{row['probability']*100:.1f}%"
+                "confidence": f"{prob*100:.1f}%"
             })
 
         return {"critical_events": results}

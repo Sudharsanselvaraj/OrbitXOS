@@ -60,7 +60,7 @@ def predict_top_events(top_n: int = 4):
         if max_prob <= 0:
             df['probability'] = 0.0
         else:
-            df['probability'] = df['raw_prob'] / max_prob  # scale 0–1 proportionally
+            df['probability'] = df['raw_prob'] / max_prob
 
         # Clamp to 0–1
         df['probability'] = df['probability'].clip(0.0, 1.0)
@@ -73,6 +73,9 @@ def predict_top_events(top_n: int = 4):
         if future_df.empty:
             return {"critical_events": [], "status": "info", "message": "No upcoming events found."}
 
+        # Filter satellites with alphabetic names only
+        future_df = future_df[future_df.iloc[:, 1].str.contains(r'[A-Za-z]')]
+
         # Sort by probability descending and take top_n
         critical_df = future_df.sort_values("probability", ascending=False).head(top_n)
 
@@ -81,7 +84,7 @@ def predict_top_events(top_n: int = 4):
             prob = row['probability']
             risk_level, maneuver = classify_risk(prob)
             results.append({
-                "satellite": row.iloc[1],
+                "satellite": row.iloc[1],  # alphabetic name only
                 "debris": row.iloc[2],
                 "tca": row.iloc[4],
                 "time_to_impact": time_to_impact(row.iloc[4]),

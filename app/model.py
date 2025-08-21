@@ -51,19 +51,18 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # Epoch is column 4, probability is column 5
+        # Epoch is column 4, raw risk score is column 5
         df['EPOCH_dt'] = pd.to_datetime(df.iloc[:, 4], errors='coerce', utc=True)
-        df['raw_prob'] = pd.to_numeric(df.iloc[:, 5], errors='coerce')
+        df['raw_prob'] = pd.to_numeric(df.iloc[:, 5], errors='coerce').fillna(0.0)
 
-        # Smart normalization:
-        # If max(prob) > 1, assume 0–100 scale; else 0–1
+        # --- Dynamic scaling of probabilities ---
         max_prob = df['raw_prob'].max()
-        if max_prob > 1.0:
-            df['probability'] = df['raw_prob'] / 100.0
+        if max_prob <= 0:
+            df['probability'] = 0.0
         else:
-            df['probability'] = df['raw_prob']
+            df['probability'] = df['raw_prob'] / max_prob  # scale 0–1 proportionally
 
-        # Clamp between 0 and 1
+        # Clamp to 0–1
         df['probability'] = df['probability'].clip(0.0, 1.0)
 
         # Filter events: today + next day

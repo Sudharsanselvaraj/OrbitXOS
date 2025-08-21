@@ -4,11 +4,11 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from math import floor
 
-# --- Paths ---
+# Paths
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "prop_risk_model_resaved.joblib")
 CSV_PATH = os.path.join(os.path.dirname(__file__), "reduced_file2.csv")
 
-# --- Load model (optional; fallback if no probability column) ---
+# Load model (optional; fallback if CSV has no probabilities)
 if os.path.exists(MODEL_PATH):
     model = joblib.load(MODEL_PATH)
 else:
@@ -51,19 +51,11 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # --- Columns ---
-        sat_col = df.columns[1]  # Satellite name
-        debris_col = df.columns[2]  # Debris name
-        tca_col = df.columns[4]  # TCA datetime
-        prob_col = df.columns[5]  # Raw probability / risk score
+        # Epoch is column 4, raw risk score is column 5
+        df['EPOCH_dt'] = pd.to_datetime(df.iloc[:, 4], errors='coerce', utc=True)
+        df['raw_prob'] = pd.to_numeric(df.iloc[:, 5], errors='coerce').fillna(0.0)
 
-        # Convert TCA to datetime
-        df['EPOCH_dt'] = pd.to_datetime(df[tca_col], errors='coerce', utc=True)
-
-        # Convert raw probability to numeric
-        df['raw_prob'] = pd.to_numeric(df[prob_col], errors='coerce').fillna(0.0)
-
-        # --- Dynamic scaling of probabilities ---
+        # Dynamic scaling of probabilities
         max_prob = df['raw_prob'].max()
         if max_prob <= 0:
             df['probability'] = 0.0
@@ -71,30 +63,32 @@ def predict_top_events(top_n: int = 4):
             df['probability'] = df['raw_prob'] / max_prob
         df['probability'] = df['probability'].clip(0.0, 1.0)
 
-        # --- Filter events: today + next day ---
+        # Filter events: today + next day
         now = datetime.now(timezone.utc)
-        day_after_tomorrow = now + timedelta(days=2)
-        future_df = df[(df['EPOCH_dt'] >= now) & (df['EPOCH_dt'] <= day_after_tomorrow)]
-
-        # --- Keep only satellites with alphabetic names ---
-        future_df[sat_col] = future_df[sat_col].astype(str)
-        future_df = future_df[future_df[sat_col].str.contains(r'[A-Za-z]')]
+        tomorrow = now + timedelta(days=2)
+        future_df = df[(df['EPOCH_dt'] >= now) & (df['EPOCH_dt'] <= tomorrow)]
 
         if future_df.empty:
             return {"critical_events": [], "status": "info", "message": "No upcoming events found."}
 
-        # --- Sort by probability descending and take top_n ---
+        # Sort by probability descending and take top_n
         critical_df = future_df.sort_values("probability", ascending=False).head(top_n)
 
         results = []
         for _, row in critical_df.iterrows():
             prob = row['probability']
             risk_level, maneuver = classify_risk(prob)
+
+            # Determine satellite name: use alphabetic name if exists; else numeric ID
+            sat_name = str(row.iloc[1])
+            if not any(c.isalpha() for c in sat_name):
+                sat_name = f"SAT-{sat_name}"  # fallback label
+
             results.append({
-                "satellite": row[sat_col],
-                "debris": row[debris_col],
-                "tca": row[tca_col],
-                "time_to_impact": time_to_impact(row[tca_col]),
+                "satellite": sat_name,
+                "debris": row.iloc[2],
+                "tca": row.iloc[4],
+                "time_to_impact": time_to_impact(row.iloc[4]),
                 "probability": f"{prob*100:.1f}%",
                 "risk_level": risk_level,
                 "maneuver_suggestion": maneuver,

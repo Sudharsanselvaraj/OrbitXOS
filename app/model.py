@@ -44,33 +44,36 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # Convert EPOCH to datetime (UTC) and filter only future events
+        # Convert EPOCH to datetime (UTC)
         df['EPOCH_dt'] = pd.to_datetime(df['EPOCH'], errors='coerce', utc=True)
         now = datetime.now(timezone.utc)
-        df = df[df['EPOCH_dt'] > now]
 
-        if df.empty:
-            return {"status": "info", "message": "No upcoming events found."}
+        # Filter only future events
+        future_df = df[df['EPOCH_dt'] > now]
+
+        # If not enough future events, pick closest upcoming events regardless
+        if len(future_df) < top_n:
+            future_df = df[df['EPOCH_dt'].notna()].sort_values("EPOCH_dt").head(top_n)
 
         # Map CSV columns to model features
-        df['i_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df.columns else 0.0
-        df['j_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df.columns else 0.0
-        df['i_incl'] = df['INCLINATION'] if 'INCLINATION' in df.columns else 0.0
-        df['j_incl'] = df['INCLINATION'] if 'INCLINATION' in df.columns else 0.0
-        df['i_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df.columns else 0.0
-        df['j_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df.columns else 0.0
-        df['vrel_kms'] = df['VREL_KMS'] if 'VREL_KMS' in df.columns else 0.5  # default placeholder
+        df_cols = df.columns
+        df['i_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df_cols else 0.0
+        df['j_ecc'] = df['ECCENTRICITY'] if 'ECCENTRICITY' in df_cols else 0.0
+        df['i_incl'] = df['INCLINATION'] if 'INCLINATION' in df_cols else 0.0
+        df['j_incl'] = df['INCLINATION'] if 'INCLINATION' in df_cols else 0.0
+        df['i_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df_cols else 0.0
+        df['j_sma'] = df['MEAN_MOTION'] if 'MEAN_MOTION' in df_cols else 0.0
+        df['vrel_kms'] = df['VREL_KMS'] if 'VREL_KMS' in df_cols else 0.5
 
-        # Features for prediction
         feature_cols = ["i_ecc", "j_ecc", "i_incl", "j_incl", "i_sma", "j_sma", "vrel_kms"]
-        X = df[feature_cols]
+        X = future_df[feature_cols]
 
         # Predict probabilities
         probs = model.predict_proba(X)[:, 1]
-        df["probability"] = probs
+        future_df["probability"] = probs
 
-        # Get top-N critical upcoming events
-        critical_df = df.sort_values("probability", ascending=False).head(top_n)
+        # Get top-N critical events
+        critical_df = future_df.sort_values("probability", ascending=False).head(top_n)
 
         results = []
         for _, row in critical_df.iterrows():

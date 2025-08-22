@@ -6,4 +6,3 @@ numpy
 pandas
 python-dateutil
 requests
-sgp4

@@ -1,10 +1,8 @@
 import os
 import joblib
 import pandas as pd
-import requests
 from datetime import datetime, timezone, timedelta
 from math import floor
-from urllib.parse import quote
 
 # -------------------------------
 # Paths & Model
@@ -82,9 +80,17 @@ def predict_top_events(top_n: int = 4):
     try:
         df = pd.read_csv(CSV_PATH)
 
-        # Parse datetime and probabilities
-        df["EPOCH_dt"] = pd.to_datetime(df.iloc[:, 4], errors="coerce", utc=True)
-        df["raw_prob"] = pd.to_numeric(df.iloc[:, 5], errors="coerce").fillna(0.0)
+        # Parse datetime
+        df["EPOCH_dt"] = pd.to_datetime(df["tca"], errors="coerce", utc=True)
+
+        # Compute probabilities
+        if model:  
+            # Use ML model if available
+            features = df[["miss_km", "vrel_kms"]].fillna(0.0)
+            df["raw_prob"] = model.predict_proba(features)[:, 1]
+        else:
+            # Fallback: simple scoring based on miss distance
+            df["raw_prob"] = 1 / (1 + df["miss_km"].astype(float))
 
         # Normalize probabilities
         max_prob = df["raw_prob"].max()
@@ -105,17 +111,16 @@ def predict_top_events(top_n: int = 4):
             prob = row["probability"]
             risk_level, maneuver = classify_risk(prob)
 
-            # Satellite & debris names
-            sat_name = str(row.iloc[1]) if any(c.isalpha() for c in str(row.iloc[1])) else f"SAT-{row.iloc[1]}"
-            debris_name = str(row.iloc[2])
+            sat_name = str(row["i_name"])   # ✅ real satellite name
+            debris_name = str(row["j_name"])  # ✅ real debris name
 
             results.append({
                 "satellite": sat_name,
                 "satellite_tle": fetch_tle(sat_name),
                 "debris": debris_name,
                 "debris_tle": fetch_tle(debris_name),
-                "tca": row.iloc[4],
-                "time_to_impact": time_to_impact(row.iloc[4]),
+                "tca": row["tca"],
+                "time_to_impact": time_to_impact(row["tca"]),
                 "probability": f"{prob*100:.1f}%",
                 "risk_level": risk_level,
                 "maneuver_suggestion": maneuver,

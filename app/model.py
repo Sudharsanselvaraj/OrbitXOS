@@ -63,7 +63,6 @@ def fetch_tle(name: str) -> str:
         for i in range(len(lines)):
             line = lines[i].strip()
             if line.upper() == name_upper:
-                # Return this line + next 2 lines as the TLE block
                 if i + 2 < len(lines):
                     return "\n".join([lines[i].strip(), lines[i + 1].strip(), lines[i + 2].strip()])
                 else:
@@ -83,13 +82,23 @@ def predict_top_events(top_n: int = 4):
         # Parse datetime
         df["EPOCH_dt"] = pd.to_datetime(df["tca"], errors="coerce", utc=True)
 
-        # Compute probabilities
-        if model:  
-            # Use ML model if available
-            features = df[["miss_km", "vrel_kms"]].fillna(0.0)
-            df["raw_prob"] = model.predict_proba(features)[:, 1]
+        # -------------------------------
+        # Probability calculation
+        # -------------------------------
+        if model:
+            try:
+                # Get model features
+                if hasattr(model, "feature_names_in_"):
+                    feature_cols = list(model.feature_names_in_)
+                else:
+                    feature_cols = df.columns[:model.n_features_in_]
+
+                features = df[feature_cols].fillna(0.0)
+                df["raw_prob"] = model.predict_proba(features)[:, 1]
+            except Exception as e:
+                print("⚠️ Model input mismatch, fallback to heuristic:", e)
+                df["raw_prob"] = 1 / (1 + df["miss_km"].astype(float))
         else:
-            # Fallback: simple scoring based on miss distance
             df["raw_prob"] = 1 / (1 + df["miss_km"].astype(float))
 
         # Normalize probabilities
@@ -111,8 +120,8 @@ def predict_top_events(top_n: int = 4):
             prob = row["probability"]
             risk_level, maneuver = classify_risk(prob)
 
-            sat_name = str(row["i_name"])   # ✅ real satellite name
-            debris_name = str(row["j_name"])  # ✅ real debris name
+            sat_name = str(row["i_name"])
+            debris_name = str(row["j_name"])
 
             results.append({
                 "satellite": sat_name,

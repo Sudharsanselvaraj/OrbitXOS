@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from math import floor
 
+
 # -------------------------------
 # Paths & Model
 # -------------------------------

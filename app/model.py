@@ -73,7 +73,7 @@ def fetch_tle(name: str) -> str:
 # -------------------------------
 # Predict Top Events
 # -------------------------------
-def predict_top_events(top_n: int = 4):
+def predict_top_events(top_n: int = 6):
     """Return top N upcoming critical events from the CSV dataset."""
     try:
         df = pd.read_csv(CSV_PATH)

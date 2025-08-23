@@ -4,14 +4,14 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from math import floor
 
-
 # -------------------------------
 # Paths & Model
 # -------------------------------
-BASE_DIR = os.path.dirname(__file__)   # <-- corrected here
+BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.path.join(BASE_DIR, "prop_risk_model_resaved.joblib")
 CSV_PATH = os.path.join(BASE_DIR, "reduced_file2.csv")
 TLE_FILE = os.path.join(BASE_DIR, "active_satellites_tle.txt")
+
 # Load risk model if available
 model = joblib.load(MODEL_PATH) if os.path.exists(MODEL_PATH) else None
 
@@ -75,7 +75,7 @@ def fetch_tle(name: str) -> str:
 # Predict Top Events
 # -------------------------------
 def predict_top_events(top_n: int = 6):
-    """Return top N upcoming critical events from the CSV dataset."""
+    """Return top N upcoming critical events (pads with past/low events if needed)."""
     try:
         df = pd.read_csv(CSV_PATH)
 
@@ -87,7 +87,6 @@ def predict_top_events(top_n: int = 6):
         # -------------------------------
         if model:
             try:
-                # Get model features
                 if hasattr(model, "feature_names_in_"):
                     feature_cols = list(model.feature_names_in_)
                 else:
@@ -105,18 +104,27 @@ def predict_top_events(top_n: int = 6):
         max_prob = df["raw_prob"].max()
         df["probability"] = 0.0 if max_prob <= 0 else (df["raw_prob"] / max_prob).clip(0.0, 1.0)
 
-        # Filter: events within next 2 days
+        # -------------------------------
+        # Select events
+        # -------------------------------
         now, cutoff = datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(days=2)
         future_df = df[(df["EPOCH_dt"] >= now) & (df["EPOCH_dt"] <= cutoff)]
 
-        if future_df.empty:
-            return {"critical_events": [], "status": "info", "message": "No upcoming events found."}
+        # Sort by probability
+        future_df = future_df.sort_values("probability", ascending=False)
 
-        # Select top N by probability
-        critical_df = future_df.sort_values("probability", ascending=False).head(top_n)
+        # If fewer than top_n events, pad with other low-probability / past events
+        if len(future_df) < top_n:
+            filler_df = df.drop(future_df.index).sort_values("probability", ascending=False)
+            combined_df = pd.concat([future_df, filler_df]).head(top_n)
+        else:
+            combined_df = future_df.head(top_n)
 
+        # -------------------------------
+        # Build results
+        # -------------------------------
         results = []
-        for _, row in critical_df.iterrows():
+        for _, row in combined_df.iterrows():
             prob = row["probability"]
             risk_level, maneuver = classify_risk(prob)
 

@@ -75,7 +75,7 @@ def fetch_tle(name: str) -> str:
 # Predict Top Events
 # -------------------------------
 def predict_top_events(top_n: int = 6):
-    """Return top N upcoming critical events (pads with past/low events if needed)."""
+    """Return top N highest-risk events from the CSV dataset with mixed risks (no time filter)."""
     try:
         df = pd.read_csv(CSV_PATH)
 
@@ -100,32 +100,17 @@ def predict_top_events(top_n: int = 6):
         else:
             df["raw_prob"] = 1 / (1 + df["miss_km"].astype(float))
 
-        # Normalize probabilities
-        max_prob = df["raw_prob"].max()
-        df["probability"] = 0.0 if max_prob <= 0 else (df["raw_prob"] / max_prob).clip(0.0, 1.0)
+        # Scale probability between 0–1 (keeps variety, not all 1.0)
+        df["probability"] = df["raw_prob"].clip(0.0, 1.0)
 
         # -------------------------------
-        # Select events
+        # Pick top N events by probability
         # -------------------------------
-        now, cutoff = datetime.now(timezone.utc), datetime.now(timezone.utc) + timedelta(days=2)
-        future_df = df[(df["EPOCH_dt"] >= now) & (df["EPOCH_dt"] <= cutoff)]
+        critical_df = df.sort_values("probability", ascending=False).head(top_n)
 
-        # Sort by probability
-        future_df = future_df.sort_values("probability", ascending=False)
-
-        # If fewer than top_n events, pad with other low-probability / past events
-        if len(future_df) < top_n:
-            filler_df = df.drop(future_df.index).sort_values("probability", ascending=False)
-            combined_df = pd.concat([future_df, filler_df]).head(top_n)
-        else:
-            combined_df = future_df.head(top_n)
-
-        # -------------------------------
-        # Build results
-        # -------------------------------
         results = []
-        for _, row in combined_df.iterrows():
-            prob = row["probability"]
+        for _, row in critical_df.iterrows():
+            prob = float(row["probability"])
             risk_level, maneuver = classify_risk(prob)
 
             sat_name = str(row["i_name"])

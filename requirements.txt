@@ -6,3 +6,5 @@ numpy
 pandas
 python-dateutil
 requests
+#fastapi
+#numpy 
